@@ -482,4 +482,4 @@ end)
 RefreshPlayerList()
 UpdateStatus()
 -- Success message
-Message("Loaded", "KILASIK's Multi-Target Fling GUI loaded!", 3)
+Message("Loaded", "HIZOLON's Multi-Target Fling GUI loaded!", 3)
