@@ -1,3 +1,6 @@
+--[[
+    ЕСЛИ РАБОТАЕТ ТО НЕ ХУЙ ЛЕЗТЬ, БИЛЯЯЯЯЯ 67 ПОКОЁ ВЕНОМ
+]]
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
