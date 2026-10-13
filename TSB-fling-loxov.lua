@@ -1,6 +1,6 @@
 --[[
     ЕСЛИ РАБОТАЕТ ТО НЕ ХУЙ ЛЕЗТЬ, БИЛЯЯЯЯЯ 67 ПОКОЁ ВЕНОМ
-    (Изменено: одна цель + позиция ПОД целью, обновление каждый кадр)
+    (Изменено: одна цель + точная позиция цели, обновление каждый кадр)
 ]]
 -- Services
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local Player = Players.LocalPlayer
 
 -- GUI Setup
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "hizolonBelowGUI"
+ScreenGui.Name = "hizolonExactGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
@@ -34,7 +34,7 @@ TitleBar.Parent = MainFrame
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -30, 1, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "HIZOLON BELOW TARGET"
+Title.Text = "HIZOLON EXACT TARGET"
 Title.TextColor3 = Color3.fromRGB(255, 80, 80)
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 16
@@ -209,7 +209,7 @@ end
 -- Update status display
 function UpdateStatus()
     if FollowActive and SelectedTarget then
-        StatusLabel.Text = "Below: " .. SelectedTarget.Name
+        StatusLabel.Text = "Exact: " .. SelectedTarget.Name
         StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
     elseif SelectedTarget then
         StatusLabel.Text = "Selected: " .. SelectedTarget.Name
@@ -229,8 +229,8 @@ local function Message(Title, Text, Time)
     })
 end
 
--- Позиционирование ПОД целью
-local function PositionBelowTarget(TargetPlayer)
+-- Точное позиционирование по цели (позиция + ориентация)
+local function PositionExactTarget(TargetPlayer)
     local Character = Player.Character
     if not Character then return end
     local Humanoid = Character:FindFirstChildOfClass("Humanoid")
@@ -243,17 +243,14 @@ local function PositionBelowTarget(TargetPlayer)
     local TRootPart = THumanoid and THumanoid.RootPart
     if not TRootPart then return end
 
-    -- Позиция ПОД целью (3 стада вниз)
-    local targetPos = TRootPart.Position
-    local belowPos = Vector3.new(targetPos.X, targetPos.Y - 3, targetPos.Z)
-
+    -- Точная позиция и ориентация цели
     RootPart.Velocity = Vector3.new(0, 0, 0)
     RootPart.RotVelocity = Vector3.new(0, 0, 0)
-    RootPart.CFrame = CFrame.new(belowPos)
-    Character:SetPrimaryPartCFrame(CFrame.new(belowPos))
+    RootPart.CFrame = TRootPart.CFrame
+    Character:SetPrimaryPartCFrame(TRootPart.CFrame)
 end
 
--- Start follow (Heartbeat = каждый кадр, максимум возможного)
+-- Start follow (Heartbeat = каждый кадр, максимально быстро)
 local function StartFollow()
     if FollowActive then return end
     if not SelectedTarget or not SelectedTarget.Parent then
@@ -265,7 +262,7 @@ local function StartFollow()
 
     FollowActive = true
     UpdateStatus()
-    Message("Started", "Below " .. SelectedTarget.Name, 2)
+    Message("Started", "Exact match: " .. SelectedTarget.Name, 2)
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function()
         if not FollowActive then return end
@@ -278,7 +275,7 @@ local function StartFollow()
             UpdateStatus()
             return
         end
-        PositionBelowTarget(SelectedTarget)
+        PositionExactTarget(SelectedTarget)
     end)
 end
 
@@ -322,4 +319,4 @@ end)
 -- Initialize
 RefreshPlayerList()
 UpdateStatus()
-Message("Loaded", "HIZOLON Below-Target GUI loaded!", 3)
+Message("Loaded", "HIZOLON Exact-Target GUI loaded!", 3)
