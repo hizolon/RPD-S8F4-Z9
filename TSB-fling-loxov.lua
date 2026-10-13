@@ -1,70 +1,166 @@
 --[[
-    Invisible Backstabber for TSB (The Strongest Battlegrounds)
-    Реконструкция обфусцированного скрипта (Evoke Obfuscator)
-    
+    Invisible Backstabber GUI (стиль HIZOLON Fling)
     Функционал:
     - Невидимый персонаж
     - Позиционирование строго позади цели
+    - Синхронизация поворота с целью
     - Пинг-компенсация (предсказание движения)
-    - Автоатака без промахов
-    
-    ⚠️ ВНИМАНИЕ: Использование в TSB = бан аккаунта (Hyperion/Byfron)
+
+    Оболочка и стиль — из флингТСБ_код.txt
 ]]
 
 -- ============================================================
--- 1. СЕРВИСЫ И ССЫЛКИ
+-- SERVICES
 -- ============================================================
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
 local Stats             = game:GetService("Stats")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local LocalPlayer = Players.LocalPlayer
-local Camera      = workspace.CurrentCamera
+local Player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
 -- ============================================================
--- 2. КОНФИГ
+-- CONFIG
 -- ============================================================
 local CONFIG = {
     -- Позиционирование
-    BEHIND_STUDS     = 3,       -- на сколько studs позади цели стоять
-    HEIGHT_OFFSET    = 0,       -- смещение по высоте
-    UPDATE_RATE      = 0,       -- 0 = каждый кадр (RenderStepped)
+    BEHIND_STUDS     = 3,
+    HEIGHT_OFFSET    = 0,
 
     -- Невидимость
     INVISIBLE        = true,
-    INVISIBLE_PARTS  = true,    -- скрывать все части (не только HRP)
-
-    -- Атака
-    AUTO_ATTACK      = true,
-    ATTACK_RANGE     = 8,       -- дистанция для автоатаки
-    ATTACK_COOLDOWN  = 0.15,    -- задержка между ударами
 
     -- Пинг-компенсация
     PING_COMPENSATE  = true,
-    PREDICTION_MULT  = 1.0,     -- множитель предсказания
-
-    -- Цель
-    TARGET_NAME      = nil,     -- ник цели (nil = выбрать первого врага)
+    PREDICTION_MULT  = 1.0,
 }
 
 -- ============================================================
--- 3. УТИЛИТЫ
+-- GUI SETUP (стиль флинга)
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "InvisBackstabberGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -30, 1, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "INVISIBLE BACKSTABBER"
+Title.TextColor3 = Color3.fromRGB(255, 80, 80)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 18
+Title.Parent = TitleBar
+
+-- Close Button
+local CloseButton = Instance.new("TextButton")
+CloseButton.Position = UDim2.new(1, -30, 0, 0)
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+CloseButton.BorderSizePixel = 0
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.Font = Enum.Font.SourceSansBold
+CloseButton.TextSize = 18
+CloseButton.Parent = TitleBar
+
+-- Status Label
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Position = UDim2.new(0, 10, 0, 40)
+StatusLabel.Size = UDim2.new(1, -20, 0, 25)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Select target to backstab"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatusLabel.Font = Enum.Font.SourceSans
+StatusLabel.TextSize = 16
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = MainFrame
+
+-- Player Selection Frame
+local SelectionFrame = Instance.new("Frame")
+SelectionFrame.Position = UDim2.new(0, 10, 0, 70)
+SelectionFrame.Size = UDim2.new(1, -20, 0, 200)
+SelectionFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+SelectionFrame.BorderSizePixel = 0
+SelectionFrame.Parent = MainFrame
+
+-- Player List ScrollFrame
+local PlayerScrollFrame = Instance.new("ScrollingFrame")
+PlayerScrollFrame.Position = UDim2.new(0, 5, 0, 5)
+PlayerScrollFrame.Size = UDim2.new(1, -10, 1, -10)
+PlayerScrollFrame.BackgroundTransparency = 1
+PlayerScrollFrame.BorderSizePixel = 0
+PlayerScrollFrame.ScrollBarThickness = 6
+PlayerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerScrollFrame.Parent = SelectionFrame
+
+-- Start Button
+local StartButton = Instance.new("TextButton")
+StartButton.Position = UDim2.new(0, 10, 0, 280)
+StartButton.Size = UDim2.new(0.5, -15, 0, 40)
+StartButton.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+StartButton.BorderSizePixel = 0
+StartButton.Text = "START"
+StartButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartButton.Font = Enum.Font.SourceSansBold
+StartButton.TextSize = 18
+StartButton.Parent = MainFrame
+
+-- Stop Button
+local StopButton = Instance.new("TextButton")
+StopButton.Position = UDim2.new(0.5, 5, 0, 280)
+StopButton.Size = UDim2.new(0.5, -15, 0, 40)
+StopButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+StopButton.BorderSizePixel = 0
+StopButton.Text = "STOP"
+StopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopButton.Font = Enum.Font.SourceSansBold
+StopButton.TextSize = 18
+StopButton.Parent = MainFrame
+
+-- Invisibility Toggle
+local InvisToggle = Instance.new("TextButton")
+InvisToggle.Position = UDim2.new(0, 10, 0, 330)
+InvisToggle.Size = UDim2.new(1, -20, 0, 30)
+InvisToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+InvisToggle.BorderSizePixel = 0
+InvisToggle.Text = "INVIS: ON"
+InvisToggle.TextColor3 = Color3.fromRGB(0, 255, 0)
+InvisToggle.Font = Enum.Font.SourceSans
+InvisToggle.TextSize = 14
+InvisToggle.Parent = MainFrame
+
+-- ============================================================
+-- VARIABLES
+-- ============================================================
+local SelectedTarget = nil
+local PlayerButtons = {}
+local BackstabActive = false
+local PositionConnection = nil
+local InvisConnection = nil
+
+-- ============================================================
+-- UTILITIES
 -- ============================================================
 
--- XOR-расшифровка строк (как в оригинале)
-local function xorDecode(encoded, key1, key2)
-    local out = {}
-    for i = 1, #encoded do
-        local b = string.byte(encoded, i)
-        local k = (key1 + 57 * (i - 1)) % 256
-        out[i] = string.char(bit32.bxor(b, k, key2))
-    end
-    return table.concat(out)
-end
-
--- Получить пинг игрока (мс)
 local function getPing()
     local ok, ping = pcall(function()
         return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
@@ -72,81 +168,25 @@ local function getPing()
     return ok and ping or 50
 end
 
--- Проверка живой ли персонаж
 local function isAlive(plr)
     if not plr or not plr.Character then return false end
     local hum = plr.Character:FindFirstChildOfClass("Humanoid")
     return hum and hum.Health > 0
 end
 
--- Получить HRP (HumanoidRootPart)
 local function getHRP(plr)
     if not plr or not plr.Character then return nil end
     return plr.Character:FindFirstChild("HumanoidRootPart")
 end
 
 -- ============================================================
--- 4. СИСТЕМА ЦЕЛЕЙ
--- ============================================================
-local TargetModule = {}
-TargetModule.current = nil
-
-function TargetModule.getEnemies()
-    local enemies = {}
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and isAlive(plr) then
-            table.insert(enemies, plr)
-        end
-    end
-    return enemies
-end
-
-function TargetModule.getNearest()
-    local myHRP = getHRP(LocalPlayer)
-    if not myHRP then return nil end
-
-    local nearest, minDist = nil, math.huge
-    for _, plr in ipairs(TargetModule.getEnemies()) do
-        local hrp = getHRP(plr)
-        if hrp then
-            local d = (hrp.Position - myHRP.Position).Magnitude
-            if d < minDist then
-                nearest, minDist = plr, d
-            end
-        end
-    end
-    return nearest
-end
-
-function TargetModule.setByName(name)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Name:lower():find(name:lower(), 1, true) then
-            TargetModule.current = plr
-            return plr
-        end
-    end
-    return nil
-end
-
-function TargetModule.update()
-    if CONFIG.TARGET_NAME then
-        TargetModule.setByName(CONFIG.TARGET_NAME)
-    end
-    if not isAlive(TargetModule.current) then
-        TargetModule.current = TargetModule.getNearest()
-    end
-    return TargetModule.current
-end
-
--- ============================================================
--- 5. НЕВИДИМОСТЬ
+-- INVISIBILITY
 -- ============================================================
 local Invisibility = {}
 
 function Invisibility.apply()
-    local char = LocalPlayer.Character
+    local char = Player.Character
     if not char then return end
-
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.LocalTransparencyModifier = 1
@@ -159,9 +199,8 @@ function Invisibility.apply()
 end
 
 function Invisibility.remove()
-    local char = LocalPlayer.Character
+    local char = Player.Character
     if not char then return end
-
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.LocalTransparencyModifier = 0
@@ -171,239 +210,261 @@ function Invisibility.remove()
 end
 
 -- ============================================================
--- 6. ПОЗИЦИОНИРОВАНИЕ ПОЗАДИ ЦЕЛИ
+-- POSITIONER (с синхронизацией поворота)
 -- ============================================================
 local Positioner = {}
 
-function Positioner.getBehindCFrame(targetHRP, myHRP)
-    if not targetHRP or not myHRP then return nil end
+-- Возвращает CFrame позади цели С ТЕМ ЖЕ ПОВОРОТОМ, что и у цели
+function Positioner.getBehindCFrame(targetHRP)
+    if not targetHRP then return nil end
 
-    -- Базовая позиция: позади цели по её LookVector
     local targetCF = targetHRP.CFrame
-    local behindCF = targetCF * CFrame.new(0, CONFIG.HEIGHT_OFFSET, CONFIG.BEHIND_STUDS)
 
-    -- Пинг-компенсация: предсказание позиции цели
+    -- Предсказание позиции (пинг-компенсация)
+    local predictedPos = targetHRP.Position
     if CONFIG.PING_COMPENSATE then
-        local ping = getPing() / 1000  -- в секунды
+        local ping = getPing() / 1000
         local velocity = targetHRP.AssemblyLinearVelocity
-        local predictedPos = targetHRP.Position + velocity * ping * CONFIG.PREDICTION_MULT
-
-        -- Смотрим на предсказанную позицию, стоим позади неё
-        behindCF = CFrame.new(
-            predictedPos - targetCF.LookVector * CONFIG.BEHIND_STUDS,
-            predictedPos
-        ) * CFrame.new(0, CONFIG.HEIGHT_OFFSET, 0)
+        predictedPos = targetHRP.Position + velocity * ping * CONFIG.PREDICTION_MULT
     end
+
+    -- Позиция позади цели по её LookVector
+    local behindPos = predictedPos - targetCF.LookVector * CONFIG.BEHIND_STUDS
+    behindPos = behindPos + Vector3.new(0, CONFIG.HEIGHT_OFFSET, 0)
+
+    -- ВАЖНО: используем Rotation цели, чтобы персонаж смотрел туда же, куда и цель
+    local behindCF = CFrame.new(behindPos) * (targetCF - targetCF.Position)
 
     return behindCF
 end
 
 function Positioner.teleport()
-    local target = TargetModule.current
-    if not isAlive(target) then return end
-
-    local targetHRP = getHRP(target)
-    local myHRP     = getHRP(LocalPlayer)
+    if not SelectedTarget or not isAlive(SelectedTarget) then return end
+    local targetHRP = getHRP(SelectedTarget)
+    local myHRP = getHRP(Player)
     if not targetHRP or not myHRP then return end
 
-    local newCF = Positioner.getBehindCFrame(targetHRP, myHRP)
+    local newCF = Positioner.getBehindCFrame(targetHRP)
     if not newCF then return end
 
-    -- Прямая установка CFrame (телепорт)
     myHRP.CFrame = newCF
     myHRP.AssemblyLinearVelocity = Vector3.zero
 end
 
 -- ============================================================
--- 7. АВТОАТАКА
+-- PLAYER LIST (стиль флинга)
 -- ============================================================
-local Attacker = {}
-Attacker.lastAttack = 0
-
--- Попытка найти Remote для атаки
-local function findAttackRemote()
-    local candidates = {
-        "Remotes",
-        "RemoteEvents",
-        "Combat",
-        "Attack",
-    }
-
-    for _, name in ipairs(candidates) do
-        local obj = ReplicatedStorage:FindFirstChild(name, true)
-        if obj then return obj end
+local function RefreshPlayerList()
+    for _, child in pairs(PlayerScrollFrame:GetChildren()) do
+        child:Destroy()
     end
-    return nil
+    PlayerButtons = {}
+
+    local PlayerList = Players:GetPlayers()
+    table.sort(PlayerList, function(a, b) return a.Name:lower() < b.Name:lower() end)
+
+    local yPosition = 5
+    for _, player in ipairs(PlayerList) do
+        if player ~= Player then
+            local PlayerEntry = Instance.new("Frame")
+            PlayerEntry.Size = UDim2.new(1, -10, 0, 30)
+            PlayerEntry.Position = UDim2.new(0, 5, 0, yPosition)
+            PlayerEntry.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            PlayerEntry.BorderSizePixel = 0
+            PlayerEntry.Parent = PlayerScrollFrame
+
+            local Checkbox = Instance.new("TextButton")
+            Checkbox.Size = UDim2.new(0, 24, 0, 24)
+            Checkbox.Position = UDim2.new(0, 3, 0.5, -12)
+            Checkbox.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+            Checkbox.BorderSizePixel = 0
+            Checkbox.Text = ""
+            Checkbox.Parent = PlayerEntry
+
+            local Checkmark = Instance.new("TextLabel")
+            Checkmark.Size = UDim2.new(1, 0, 1, 0)
+            Checkmark.BackgroundTransparency = 1
+            Checkmark.Text = "✓"
+            Checkmark.TextColor3 = Color3.fromRGB(0, 255, 0)
+            Checkmark.TextSize = 18
+            Checkmark.Font = Enum.Font.SourceSansBold
+            Checkmark.Visible = (SelectedTarget == player)
+            Checkmark.Parent = Checkbox
+
+            local NameLabel = Instance.new("TextLabel")
+            NameLabel.Size = UDim2.new(1, -35, 1, 0)
+            NameLabel.Position = UDim2.new(0, 30, 0, 0)
+            NameLabel.BackgroundTransparency = 1
+            NameLabel.Text = player.Name
+            NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            NameLabel.TextSize = 16
+            NameLabel.Font = Enum.Font.SourceSans
+            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            NameLabel.Parent = PlayerEntry
+
+            local ClickArea = Instance.new("TextButton")
+            ClickArea.Size = UDim2.new(1, 0, 1, 0)
+            ClickArea.BackgroundTransparency = 1
+            ClickArea.Text = ""
+            ClickArea.ZIndex = 2
+            ClickArea.Parent = PlayerEntry
+
+            ClickArea.MouseButton1Click:Connect(function()
+                if SelectedTarget == player then
+                    SelectedTarget = nil
+                    Checkmark.Visible = false
+                else
+                    SelectedTarget = player
+                    for _, data in pairs(PlayerButtons) do
+                        data.Checkmark.Visible = false
+                    end
+                    Checkmark.Visible = true
+                end
+                UpdateStatus()
+            end)
+
+            PlayerButtons[player.Name] = {
+                Entry = PlayerEntry,
+                Checkmark = Checkmark
+            }
+
+            yPosition = yPosition + 35
+        end
+    end
+
+    PlayerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPosition + 5)
 end
 
-function Attacker.attack()
-    local now = tick()
-    if now - Attacker.lastAttack < CONFIG.ATTACK_COOLDOWN then return end
-
-    local target = TargetModule.current
-    if not isAlive(target) then return end
-
-    local targetHRP = getHRP(target)
-    local myHRP     = getHRP(LocalPlayer)
-    if not targetHRP or not myHRP then return end
-
-    local dist = (targetHRP.Position - myHRP.Position).Magnitude
-    if dist > CONFIG.ATTACK_RANGE then return end
-
-    -- Попытка вызвать атаку через Remote
-    local remote = findAttackRemote()
-    if remote and remote:IsA("RemoteEvent") then
-        pcall(function()
-            remote:FireServer()
-        end)
-    end
-
-    -- Альтернатива: имитация нажатия мыши
-    pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        task.wait(0.05)
-        vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    end)
-
-    Attacker.lastAttack = now
-end
-
 -- ============================================================
--- 8. ОСНОВНОЙ ЦИКЛ (корутины)
+-- STATUS
 -- ============================================================
-
--- Поток 1: обновление цели
-local function targetLoop()
-    while task.wait(0.5) do
-        TargetModule.update()
+function UpdateStatus()
+    if BackstabActive then
+        if SelectedTarget then
+            StatusLabel.Text = "Backstabbing: " .. SelectedTarget.Name
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+        else
+            StatusLabel.Text = "No target selected"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
+    else
+        if SelectedTarget then
+            StatusLabel.Text = "Target: " .. SelectedTarget.Name
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            StatusLabel.Text = "Select target to backstab"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
     end
 end
 
--- Поток 2: позиционирование (каждый кадр)
-local function positionLoop()
-    RunService.RenderStepped:Connect(function()
+-- ============================================================
+-- NOTIFICATION
+-- ============================================================
+local function Message(Title, Text, Time)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = Title,
+        Text = Text,
+        Duration = Time or 5
+    })
+end
+
+-- ============================================================
+-- START / STOP
+-- ============================================================
+local function StartBackstab()
+    if BackstabActive then return end
+    if not SelectedTarget then
+        StatusLabel.Text = "No target selected!"
+        wait(1)
+        UpdateStatus()
+        return
+    end
+
+    BackstabActive = true
+    UpdateStatus()
+    Message("Started", "Backstabbing " .. SelectedTarget.Name, 2)
+
+    if CONFIG.INVISIBLE then
+        task.wait(0.5)
+        Invisibility.apply()
+    end
+
+    -- Позиционирование + поворот каждый кадр
+    PositionConnection = RunService.RenderStepped:Connect(function()
         pcall(Positioner.teleport)
     end)
-end
 
--- Поток 3: невидимость
-local function invisibilityLoop()
-    RunService.Stepped:Connect(function()
+    -- Невидимость
+    InvisConnection = RunService.Stepped:Connect(function()
         if CONFIG.INVISIBLE then
             pcall(Invisibility.apply)
         end
     end)
 end
 
--- Поток 4: автоатака
-local function attackLoop()
-    while task.wait(0.05) do
-        if CONFIG.AUTO_ATTACK then
-            pcall(Attacker.attack)
-        end
-    end
-end
+local function StopBackstab()
+    if not BackstabActive then return end
+    BackstabActive = false
 
--- Поток 5: слежка за респавном
-local function respawnLoop()
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        task.wait(1)
-        if CONFIG.INVISIBLE then
-            Invisibility.apply()
-        end
-    end)
+    if PositionConnection then PositionConnection:Disconnect() PositionConnection = nil end
+    if InvisConnection then InvisConnection:Disconnect() InvisConnection = nil end
+
+    Invisibility.remove()
+
+    UpdateStatus()
+    Message("Stopped", "Backstab stopped", 2)
 end
 
 -- ============================================================
--- 9. UI (простой список игроков)
+-- BUTTON CONNECTIONS
 -- ============================================================
-local function createUI()
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "InvisBackstabberUI"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+StartButton.MouseButton1Click:Connect(StartBackstab)
+StopButton.MouseButton1Click:Connect(StopBackstab)
 
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(0, 250, 0, 350)
-    Frame.Position = UDim2.new(0, 20, 0, 100)
-    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    Frame.BorderSizePixel = 0
-    Frame.Parent = ScreenGui
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0, 30)
-    Title.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-    Title.Text = "Invisible Backstabber"
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 14
-    Title.Parent = Frame
-
-    local Scrolling = Instance.new("ScrollingFrame")
-    Scrolling.Size = UDim2.new(1, -10, 1, -40)
-    Scrolling.Position = UDim2.new(0, 5, 0, 35)
-    Scrolling.BackgroundTransparency = 1
-    Scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    Scrolling.Parent = Frame
-
-    local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 4)
-    Layout.Parent = Scrolling
-
-    -- Кнопки для каждого игрока
-    local function refreshPlayers()
-        for _, child in ipairs(Scrolling:GetChildren()) do
-            if child:IsA("TextButton") then child:Destroy() end
-        end
-
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer then
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -8, 0, 28)
-                btn.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-                btn.Text = plr.Name .. "  [" .. plr.DisplayName .. "]"
-                btn.TextColor3 = Color3.fromRGB(230, 230, 230)
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 12
-                btn.Parent = Scrolling
-
-                btn.MouseButton1Click:Connect(function()
-                    TargetModule.current = plr
-                    CONFIG.TARGET_NAME = plr.Name
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-                end)
-            end
-        end
-    end
-
-    refreshPlayers()
-    Players.PlayerAdded:Connect(refreshPlayers)
-    Players.PlayerRemoving:Connect(function() task.wait(0.1) refreshPlayers() end)
-end
-
--- ============================================================
--- 10. ЗАПУСК
--- ============================================================
-local function main()
-    -- UI
-    pcall(createUI)
-
-    -- Стартуем все потоки
-    coroutine.wrap(targetLoop)()
-    coroutine.wrap(positionLoop)()
-    coroutine.wrap(invisibilityLoop)()
-    coroutine.wrap(attackLoop)()
-    coroutine.wrap(respawnLoop)()
-
-    -- Невидимость сразу
+InvisToggle.MouseButton1Click:Connect(function()
+    CONFIG.INVISIBLE = not CONFIG.INVISIBLE
     if CONFIG.INVISIBLE then
-        task.wait(0.5)
+        InvisToggle.Text = "INVIS: ON"
+        InvisToggle.TextColor3 = Color3.fromRGB(0, 255, 0)
+        Invisibility.apply()
+    else
+        InvisToggle.Text = "INVIS: OFF"
+        InvisToggle.TextColor3 = Color3.fromRGB(255, 80, 80)
+        Invisibility.remove()
+    end
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+    StopBackstab()
+    ScreenGui:Destroy()
+end)
+
+-- ============================================================
+-- PLAYER JOIN / LEAVE
+-- ============================================================
+Players.PlayerAdded:Connect(RefreshPlayerList)
+Players.PlayerRemoving:Connect(function(player)
+    if SelectedTarget == player then
+        SelectedTarget = nil
+    end
+    RefreshPlayerList()
+    UpdateStatus()
+end)
+
+-- ============================================================
+-- RESPAWN HANDLER
+-- ============================================================
+Player.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    if CONFIG.INVISIBLE then
         Invisibility.apply()
     end
+end)
 
-    print("[Invisible Backstabber] Загружено. Цель: " .. tostring(TargetModule.current))
-end
-
-main()
+-- ============================================================
+-- INIT
+-- ============================================================
+RefreshPlayerList()
+UpdateStatus()
+Message("Loaded", "Invisible Backstabber GUI loaded!", 3)
