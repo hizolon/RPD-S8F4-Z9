@@ -3,8 +3,8 @@
     Функционал:
     - Невидимый персонаж
     - Позиционирование строго позади цели
-    - Синхронизация поворота с целью
-    - Пинг-компенсация (предсказание движения)
+    - Персонаж повёрнут ЛИЦОМ к цели
+    - МАКСИМАЛЬНАЯ пинг-компенсация
 
     Оболочка и стиль — из флингТСБ_код.txt
 ]]
@@ -23,16 +23,12 @@ local Camera = workspace.CurrentCamera
 -- CONFIG
 -- ============================================================
 local CONFIG = {
-    -- Позиционирование
     BEHIND_STUDS     = 3,
     HEIGHT_OFFSET    = 0,
-
-    -- Невидимость
     INVISIBLE        = true,
-
-    -- Пинг-компенсация
     PING_COMPENSATE  = true,
-    PREDICTION_MULT  = 1.0,
+    PREDICTION_MULT  = 3.0,
+    PING_SAFETY      = 2.0,
 }
 
 -- ============================================================
@@ -43,7 +39,6 @@ ScreenGui.Name = "InvisBackstabberGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
--- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 300, 0, 350)
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
@@ -53,14 +48,12 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
--- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 30)
 TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
 
--- Title
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -30, 1, 0)
 Title.BackgroundTransparency = 1
@@ -70,7 +63,6 @@ Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 18
 Title.Parent = TitleBar
 
--- Close Button
 local CloseButton = Instance.new("TextButton")
 CloseButton.Position = UDim2.new(1, -30, 0, 0)
 CloseButton.Size = UDim2.new(0, 30, 0, 30)
@@ -82,7 +74,6 @@ CloseButton.Font = Enum.Font.SourceSansBold
 CloseButton.TextSize = 18
 CloseButton.Parent = TitleBar
 
--- Status Label
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Position = UDim2.new(0, 10, 0, 40)
 StatusLabel.Size = UDim2.new(1, -20, 0, 25)
@@ -94,7 +85,6 @@ StatusLabel.TextSize = 16
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = MainFrame
 
--- Player Selection Frame
 local SelectionFrame = Instance.new("Frame")
 SelectionFrame.Position = UDim2.new(0, 10, 0, 70)
 SelectionFrame.Size = UDim2.new(1, -20, 0, 200)
@@ -102,7 +92,6 @@ SelectionFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 SelectionFrame.BorderSizePixel = 0
 SelectionFrame.Parent = MainFrame
 
--- Player List ScrollFrame
 local PlayerScrollFrame = Instance.new("ScrollingFrame")
 PlayerScrollFrame.Position = UDim2.new(0, 5, 0, 5)
 PlayerScrollFrame.Size = UDim2.new(1, -10, 1, -10)
@@ -112,7 +101,6 @@ PlayerScrollFrame.ScrollBarThickness = 6
 PlayerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 PlayerScrollFrame.Parent = SelectionFrame
 
--- Start Button
 local StartButton = Instance.new("TextButton")
 StartButton.Position = UDim2.new(0, 10, 0, 280)
 StartButton.Size = UDim2.new(0.5, -15, 0, 40)
@@ -124,7 +112,6 @@ StartButton.Font = Enum.Font.SourceSansBold
 StartButton.TextSize = 18
 StartButton.Parent = MainFrame
 
--- Stop Button
 local StopButton = Instance.new("TextButton")
 StopButton.Position = UDim2.new(0.5, 5, 0, 280)
 StopButton.Size = UDim2.new(0.5, -15, 0, 40)
@@ -136,7 +123,6 @@ StopButton.Font = Enum.Font.SourceSansBold
 StopButton.TextSize = 18
 StopButton.Parent = MainFrame
 
--- Invisibility Toggle
 local InvisToggle = Instance.new("TextButton")
 InvisToggle.Position = UDim2.new(0, 10, 0, 330)
 InvisToggle.Size = UDim2.new(1, -20, 0, 30)
@@ -160,7 +146,6 @@ local InvisConnection = nil
 -- ============================================================
 -- UTILITIES
 -- ============================================================
-
 local function getPing()
     local ok, ping = pcall(function()
         return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
@@ -210,32 +195,40 @@ function Invisibility.remove()
 end
 
 -- ============================================================
--- POSITIONER (с синхронизацией поворота)
+-- POSITIONER
 -- ============================================================
 local Positioner = {}
 
--- Возвращает CFrame позади цели С ТЕМ ЖЕ ПОВОРОТОМ, что и у цели
 function Positioner.getBehindCFrame(targetHRP)
     if not targetHRP then return nil end
 
     local targetCF = targetHRP.CFrame
+    local targetPos = targetHRP.Position
 
-    -- Предсказание позиции (пинг-компенсация)
-    local predictedPos = targetHRP.Position
+    local predictedPos = targetPos
+    local predictedLook = targetCF.LookVector
+
     if CONFIG.PING_COMPENSATE then
-        local ping = getPing() / 1000
+        local pingSec = (getPing() / 1000) * CONFIG.PING_SAFETY
         local velocity = targetHRP.AssemblyLinearVelocity
-        predictedPos = targetHRP.Position + velocity * ping * CONFIG.PREDICTION_MULT
+        local angularVel = targetHRP.AssemblyAngularVelocity
+
+        predictedPos = targetPos + velocity * pingSec * CONFIG.PREDICTION_MULT
+
+        if angularVel.Magnitude > 0.05 then
+            local rotDelta = CFrame.fromAxisAngle(angularVel.Unit, angularVel.Magnitude * pingSec * CONFIG.PREDICTION_MULT)
+            predictedLook = (rotDelta * targetCF.LookVector)
+        end
+
+        predictedPos = predictedPos + Vector3.new(0, velocity.Y * pingSec * 0.5, 0)
     end
 
-    -- Позиция позади цели по её LookVector
-    local behindPos = predictedPos - targetCF.LookVector * CONFIG.BEHIND_STUDS
+    local behindPos = predictedPos - predictedLook * CONFIG.BEHIND_STUDS
     behindPos = behindPos + Vector3.new(0, CONFIG.HEIGHT_OFFSET, 0)
 
-    -- ВАЖНО: используем Rotation цели, чтобы персонаж смотрел туда же, куда и цель
-    local behindCF = CFrame.new(behindPos) * (targetCF - targetCF.Position)
+    local faceCFrame = CFrame.lookAt(behindPos, predictedPos)
 
-    return behindCF
+    return faceCFrame
 end
 
 function Positioner.teleport()
@@ -249,10 +242,11 @@ function Positioner.teleport()
 
     myHRP.CFrame = newCF
     myHRP.AssemblyLinearVelocity = Vector3.zero
+    myHRP.AssemblyAngularVelocity = Vector3.zero
 end
 
 -- ============================================================
--- PLAYER LIST (стиль флинга)
+-- PLAYER LIST
 -- ============================================================
 local function RefreshPlayerList()
     for _, child in pairs(PlayerScrollFrame:GetChildren()) do
@@ -390,12 +384,10 @@ local function StartBackstab()
         Invisibility.apply()
     end
 
-    -- Позиционирование + поворот каждый кадр
     PositionConnection = RunService.RenderStepped:Connect(function()
         pcall(Positioner.teleport)
     end)
 
-    -- Невидимость
     InvisConnection = RunService.Stepped:Connect(function()
         if CONFIG.INVISIBLE then
             pcall(Invisibility.apply)
